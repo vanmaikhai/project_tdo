@@ -1,0 +1,23 @@
+version: '3.9'
+services:
+  # Node JS
+  node:
+    build: 
+      context: ./tdo-be
+      dockerfile: Dockerfile
+    container_name: node-container
+    ports:
+      - '9999:9999'
+    volumes:
+      - ./tdo-be:/tdo-be
+  # React JS
+  react:
+    build: 
+      context: ./tdo-fe
+      dockerfile: Dockerfile
+    container_name: react-container
+    ports:
+      - '3000:3000'
+    stdin_open: true
+    volumes:
+      - ./tdo-fe:/tdo-fe
