@@ -1,0 +1,17 @@
+import React from 'react';
+import { useAppSelector } from '../../redux/store/hooks';
+import useCompletedTasks from '../hooks/useCompletedTasks';
+import useDescriptionTitle from '../hooks/useDescriptionTitle';
+import LayoutRoutes from '../Utilities/LayoutRoutes';
+
+const DoneTasks = ({ done, title, socket }) => {
+    const tasks = useAppSelector((state) => state.tasks.tasks);
+
+    const { tasks: tasksFiltered } = useCompletedTasks({ tasks, done });
+
+    useDescriptionTitle('All tasks done', title);
+
+    return <LayoutRoutes title={title} tasks={tasksFiltered} socket={socket}></LayoutRoutes>;
+};
+
+export default DoneTasks;

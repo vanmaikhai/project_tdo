@@ -1,25 +1,66 @@
-import logo from './logo.svg';
-import './App.css';
+import React from 'react';
+import io from 'socket.io-client';
+import { Navigate, Route, Routes, useNavigate } from 'react-router-dom';
+import AccountData from './components/AccountSection/AccountData';
+import Footer from './components/Footer';
+import Menu from './components/Menu/Menu';
+import ModalCreateTask from './components/Utilities/ModalTask';
+import { useAppDispatch, useAppSelector } from './redux/store/hooks';
+import { modalActions } from './redux/store/Modal.store';
+import { tasksActions } from './redux/store/Tasks.store';
+import HeaderTasks from './components/TasksSection/HeaderTasks';
+import Directory from './components/Routes/Directory';
+import TaskOnly from './components/Routes/TaskOnly';
+import HomePage from './pages/HomePage';
+import TodaysTaskPage from './pages/TodayTask';
+import ImportantTasksPage from './pages/ImportantTasksPage';
+import CompleteTasksPage from './pages/CompleteTasksPage';
+import UnCompleteTaskPage from './pages/UnCompleteTaskPage';
+import SearchResultPage from './pages/SearchResultPage';
 
-function App() {
-  return (
-    <div className="App">
-      <header className="App-header">
-        <img src={logo} className="App-logo" alt="logo" />
-        <p>
-          Edit <code>src/App.js</code> and save to reload.
-        </p>
-        <a
-          className="App-link"
-          href="https://reactjs.org"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          Learn React
-        </a>
-      </header>
-    </div>
-  );
-}
+const SERVER_POINT = 'ws://localhost:9999';
+var socket = io(SERVER_POINT);
+
+const App = () => {
+    const modal = useAppSelector((state) => state.modal);
+    const navigate = useNavigate();
+    const dispatch = useAppDispatch();
+
+    const closeModalCreateTask = () => {
+        dispatch(modalActions.closeModalCreateTask());
+    };
+
+    const createNewTaskHandler = (task) => {
+        socket.emit('create-task', task);
+        dispatch(tasksActions.addNewTask(task));
+    };
+
+    return (
+        <div className="bg-slate-200 min-h-screen text-slate-600 dark:bg-slate-900 dark:text-slate-400 xl:text-base sm:text-sm text-xs">
+            <>
+                {modal.modalCreateTaskOpen && (
+                    <ModalCreateTask onClose={closeModalCreateTask} nameForm="Add a task" onConfirm={createNewTaskHandler} />
+                )}
+                <Menu />
+                <main className=" pt-5 pb-8 sm:pb-16 px-3 md:px-8 md:w-full xl:w-8/12 m-auto min-h-screen">
+                    <HeaderTasks />
+                    <Routes>
+                        <Route path="/" element={<HomePage socket={socket} />} />
+                        <Route path="/today" element={<TodaysTaskPage socket={socket} />} />
+                        <Route path="/important" element={<ImportantTasksPage socket={socket} />} />
+                        <Route path="/completed" element={<CompleteTasksPage socket={socket} />} />
+                        <Route path="/uncompleted" element={<UnCompleteTaskPage socket={socket} />} />
+                        <Route path="/results" element={<SearchResultPage socket={socket} />} />
+                        <Route path="/dir/:dir" element={<Directory socket={socket} />} />
+                        <Route path="/task/:taskId" element={<TaskOnly socket={socket} />} />
+                        <Route path="*" element={<Navigate to="" />} />
+                    </Routes>
+                </main>
+                <Footer />
+                <AccountData />
+            </>
+        </div>
+    );
+};
 
 export default App;
