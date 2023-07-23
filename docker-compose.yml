@@ -21,3 +21,29 @@ services:
     stdin_open: true
     volumes:
       - ./tdo-fe:/tdo-fe
+  # Mysql
+  mysql:
+    container_name: 'mysql_tdo'
+    image: mysql:5.7
+    ports:
+      - '3398:3306'
+    env_file: .db.env
+    volumes:
+      - ./mysql:/var/lib/mysql
+  # Nginx
+  nginx:
+    container_name: nginx-tdo
+    build:
+      context: ./nginx
+      dockerfile: Dockerfile
+    ports:
+      - '8088:80'
+    depends_on:
+      - node
+      - react
+      - mysql
+  # Redis
+  redis:
+    image: 'redis:alpine'
+    ports:
+      - '6379:6379'
