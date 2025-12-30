@@ -1,7 +1,8 @@
 {
-  "name": "tdo-be",
+  "name": "tdo-fe",
   "version": "0.1.0",
   "private": true,
+  "author": "vanmaikhai",
   "dependencies": {
     "@reduxjs/toolkit": "^1.9.1",
     "@tailwindcss/line-clamp": "^0.4.2",

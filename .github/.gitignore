@@ -1,0 +1,5 @@
+# GitHub workflows artifacts
+*.sarif
+audit-results.json
+security-report.md
+snyk.sarif

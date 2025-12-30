@@ -1,6 +1,6 @@
-import React from 'react';
+import React, { useEffect, useState } from 'react';
 import io from 'socket.io-client';
-import { Navigate, Route, Routes, useNavigate } from 'react-router-dom';
+import { Navigate, Route, Routes } from 'react-router-dom';
 import AccountData from './components/AccountSection/AccountData';
 import Footer from './components/Footer';
 import Menu from './components/Menu/Menu';
@@ -18,21 +18,32 @@ import CompleteTasksPage from './pages/CompleteTasksPage';
 import UnCompleteTaskPage from './pages/UnCompleteTaskPage';
 import SearchResultPage from './pages/SearchResultPage';
 
-const SERVER_POINT = 'ws://localhost:9999';
-var socket = io(SERVER_POINT);
-
 const App = () => {
+    const [socket, setSocket] = useState(null);
     const modal = useAppSelector((state) => state.modal);
-    const navigate = useNavigate();
     const dispatch = useAppDispatch();
+
+    useEffect(() => {
+        const SERVER_POINT = process.env.REACT_APP_BACKEND_URL || 'ws://localhost:9999';
+        const socketConnection = io(SERVER_POINT, {
+            transports: ['websocket'],
+            upgrade: false
+        });
+        
+        setSocket(socketConnection);
+        
+        return () => socketConnection.close();
+    }, []);
 
     const closeModalCreateTask = () => {
         dispatch(modalActions.closeModalCreateTask());
     };
 
     const createNewTaskHandler = (task) => {
-        socket.emit('create-task', task);
-        dispatch(tasksActions.addNewTask(task));
+        if (socket) {
+            socket.emit('create-task', task);
+            dispatch(tasksActions.addNewTask(task));
+        }
     };
 
     return (

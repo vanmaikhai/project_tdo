@@ -1,10 +1,26 @@
-#!/usr/bin/ bash
-docker-compose stop || true;
+#!/bin/bash
 
-docker-compose down || true;
+# Security setup script
+echo "Setting up TDO Socket Docker with security improvements..."
 
-docker-compose build;
+# Check if .env files exist
+if [ ! -f ".env" ]; then
+    echo "Creating .env file from template..."
+    cp .env.example .env
+    echo "Please update .env file with your secure credentials!"
+fi
 
-docker-compose up -d;
+# Stop and clean up
+docker-compose stop || true
+docker-compose down || true
 
-docker system prune -a -f
+# Build with no cache for security
+docker-compose build --no-cache
+
+# Start services
+docker-compose up -d
+
+# Clean up unused images
+docker system prune -f
+
+echo "Setup complete! Please ensure you have updated all passwords in .env files."

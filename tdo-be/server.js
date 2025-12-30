@@ -1,36 +1,58 @@
 const express = require('express');
-const app = express();
-const bodyParser = require('body-parser');
+const helmet = require('helmet');
 const cors = require('cors');
+const rateLimit = require('express-rate-limit');
+require('dotenv').config();
 
-app.use(cors());
-const socket = require('socket.io');
+const app = express();
 const PORT = process.env.PORT || 9999;
 
-app.use(bodyParser.urlencoded({ extended: true }));
-app.use(bodyParser.json());
+// Security middleware
+app.use(helmet());
+app.use(cors({
+    origin: process.env.FRONTEND_URL || 'http://localhost:3000',
+    credentials: true
+}));
 
-// const db = require('./src/api/v1/models');
-// db.sequelize.sync();
+// Rate limiting
+app.use(rateLimit({
+    windowMs: 15 * 60 * 1000,
+    max: 100,
+    message: { error: 'Too many requests' }
+}));
 
-// const routes = require('./src/api/v1/routes/routes');
-// routes(app);
+// Body parsing with limits
+app.use(express.json({ limit: '1mb' }));
+app.use(express.urlencoded({ extended: true, limit: '1mb' }));
+
+// Health check
+app.get('/health', (req, res) => {
+    res.status(200).json({ status: 'healthy', timestamp: new Date().toISOString() });
+});
 
 app.get('/', (req, res) => {
-    res.send({ message: 'TDO BE' });
+    res.json({ message: 'TDO BE', version: '1.0.0' });
 });
 
-app.use(function(req, res) {
-    res.status(404).send({ url: req.originalUrl + ' not found' });
+// 404 handler
+app.use((req, res) => {
+    res.status(404).json({ error: 'Route not found', path: req.originalUrl });
 });
 
-//socket
+// Error handler
+app.use((err, req, res, next) => {
+    console.error(err.stack);
+    res.status(500).json({ error: 'Internal server error' });
+});
 
-let server = app.listen(PORT, async (req, res) => {
-    try {
-        await connect();
-    } catch (err) {
-        console.log(err.message);
-    }
-    console.log(`Listening on ${PORT}`);
+const server = app.listen(PORT, () => {
+    console.log(`Server running on port ${PORT} in ${process.env.NODE_ENV || 'development'} mode`);
+});
+
+// Graceful shutdown
+process.on('SIGTERM', () => {
+    console.log('SIGTERM received, shutting down gracefully');
+    server.close(() => {
+        console.log('Process terminated');
+    });
 });

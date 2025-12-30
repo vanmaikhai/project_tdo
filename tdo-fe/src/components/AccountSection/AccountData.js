@@ -21,7 +21,7 @@ const AccountData = () => {
         <LayoutMenus menuOpen={menuOpen} closeMenuHandler={closeMenuHandler} className="top-0 right-0 ">
             <section className="p-5 flex flex-col h-full">
                 <span className="flex items-center mx-auto">
-                    <span className="font-medium">Hi, Khrai Teka</span>
+                    <span className="font-medium">Hi, Khai TK</span>
                     <img src={avatar1} alt="cat" className="w-10 rounded-full ml-4" />
                 </span>
 

@@ -1,0 +1,87 @@
+version: 2
+updates:
+  # Backend dependencies
+  - package-ecosystem: "npm"
+    directory: "/tdo-be"
+    schedule:
+      interval: "weekly"
+      day: "sunday"
+      time: "09:00"
+    open-pull-requests-limit: 5
+    reviewers:
+      - "vanmaikhai"
+    assignees:
+      - "vanmaikhai"
+    commit-message:
+      prefix: "chore(deps)"
+      include: "scope"
+    labels:
+      - "dependencies"
+      - "backend"
+      - "security"
+    ignore:
+      - dependency-name: "*"
+        update-types: ["version-update:semver-major"]
+
+  # Frontend dependencies
+  - package-ecosystem: "npm"
+    directory: "/tdo-fe"
+    schedule:
+      interval: "weekly"
+      day: "sunday"
+      time: "09:00"
+    open-pull-requests-limit: 5
+    reviewers:
+      - "vanmaikhai"
+    assignees:
+      - "vanmaikhai"
+    commit-message:
+      prefix: "chore(deps)"
+      include: "scope"
+    labels:
+      - "dependencies"
+      - "frontend"
+      - "security"
+    ignore:
+      - dependency-name: "*"
+        update-types: ["version-update:semver-major"]
+
+  # Docker base images
+  - package-ecosystem: "docker"
+    directory: "/tdo-be"
+    schedule:
+      interval: "weekly"
+      day: "sunday"
+      time: "10:00"
+    reviewers:
+      - "vanmaikhai"
+    labels:
+      - "docker"
+      - "backend"
+      - "security"
+
+  - package-ecosystem: "docker"
+    directory: "/tdo-fe"
+    schedule:
+      interval: "weekly"
+      day: "sunday"
+      time: "10:00"
+    reviewers:
+      - "vanmaikhai"
+    labels:
+      - "docker"
+      - "frontend"
+      - "security"
+
+  # GitHub Actions
+  - package-ecosystem: "github-actions"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+      day: "sunday"
+      time: "11:00"
+    reviewers:
+      - "vanmaikhai"
+    labels:
+      - "github-actions"
+      - "security"

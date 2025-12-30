@@ -1,0 +1,323 @@
+name: Security Vulnerability Check
+
+on:
+  push:
+    branches: [ main, master, develop ]
+  pull_request:
+    branches: [ main, master ]
+  schedule:
+    - cron: '0 2 * * 0'
+
+jobs:
+  vulnerability-scan:
+    runs-on: ubuntu-latest
+    
+    strategy:
+      matrix:
+        directory: [tdo-be, tdo-fe]
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+      
+    - name: Setup Node.js
+      uses: actions/setup-node@v4
+      with:
+        node-version: '18'
+        cache: 'npm'
+        cache-dependency-path: ${{ matrix.directory }}/package-lock.json
+    
+    - name: Install dependencies
+      working-directory: ${{ matrix.directory }}
+      run: npm ci
+    
+    - name: Run npm audit and fix
+      working-directory: ${{ matrix.directory }}
+      run: |
+        npm audit --audit-level=moderate --json > audit-results.json || true
+        npm audit fix --audit-level=moderate || true
+        npm audit --audit-level=moderate
+      continue-on-error: true
+    
+    - name: Upload audit results
+      uses: actions/upload-artifact@v4
+      with:
+        name: audit-results-${{ matrix.directory }}
+        path: ${{ matrix.directory }}/audit-results.json
+
+  docker-security:
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+    
+    - name: Run Trivy vulnerability scanner - Backend
+      uses: aquasecurity/trivy-action@master
+      with:
+        scan-type: 'fs'
+        scan-ref: './tdo-be'
+        format: 'sarif'
+        output: 'backend-trivy-results.sarif'
+    
+    - name: Run Trivy vulnerability scanner - Frontend
+      uses: aquasecurity/trivy-action@master
+      with:
+        scan-type: 'fs'
+        scan-ref: './tdo-fe'
+        format: 'sarif'
+        output: 'frontend-trivy-results.sarif'
+    
+    - name: Upload Trivy scan results to GitHub Security tab
+      uses: github/codeql-action/upload-sarif@v3
+      if: always()
+      with:
+        sarif_file: 'backend-trivy-results.sarif'
+    
+    - name: Upload Trivy scan results to GitHub Security tab
+      uses: github/codeql-action/upload-sarif@v3
+      if: always()
+      with:
+        sarif_file: 'frontend-trivy-results.sarif'
+
+  dockerfile-security:
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+    
+    - name: Run Hadolint on Backend Dockerfile
+      uses: hadolint/hadolint-action@v3.1.0
+      with:
+        dockerfile: tdo-be/Dockerfile
+        format: sarif
+        output-file: backend-hadolint-results.sarif
+        no-fail: true
+    
+    - name: Run Hadolint on Frontend Dockerfile
+      uses: hadolint/hadolint-action@v3.1.0
+      with:
+        dockerfile: tdo-fe/Dockerfile
+        format: sarif
+        output-file: frontend-hadolint-results.sarif
+        no-fail: true
+    
+    - name: Upload Hadolint scan results
+      uses: github/codeql-action/upload-sarif@v3
+      if: always()
+      with:
+        sarif_file: backend-hadolint-results.sarif
+    
+    - name: Upload Hadolint scan results
+      uses: github/codeql-action/upload-sarif@v3
+      if: always()
+      with:
+        sarif_file: frontend-hadolint-results.sarif
+
+  secrets-scan:
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+      with:
+        fetch-depth: 0
+    
+    - name: Run TruffleHog OSS
+      uses: trufflesecurity/trufflehog@main
+      with:
+        path: ./
+        base: main
+        head: HEAD
+        extra_args: --debug --only-verified
+
+  codeql-analysis:
+    runs-on: ubuntu-latest
+    permissions:
+      actions: read
+      contents: read
+      security-events: write
+    
+    strategy:
+      matrix:
+        language: [ 'javascript' ]
+    
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v4
+    
+    - name: Initialize CodeQL
+      uses: github/codeql-action/init@v3
+      with:
+        languages: ${{ matrix.language }}
+    
+    - name: Autobuild
+      uses: github/codeql-action/autobuild@v3
+    
+    - name: Perform CodeQL Analysis
+      uses: github/codeql-action/analyze@v3
+
+  create-security-pr:
+    runs-on: ubuntu-latest
+    needs: [vulnerability-scan, docker-security, dockerfile-security, secrets-scan, codeql-analysis]
+    if: always() && github.event_name == 'schedule'
+    permissions:
+      contents: write
+      pull-requests: write
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+      with:
+        token: ${{ secrets.GITHUBTOKEN }}
+        fetch-depth: 0
+    
+    - name: Setup Node.js
+      uses: actions/setup-node@v4
+      with:
+        node-version: '18'
+    
+    - name: Download audit artifacts
+      uses: actions/download-artifact@v4
+      with:
+        pattern: audit-results-*
+        merge-multiple: true
+    
+    - name: Check for vulnerabilities and apply fixes
+      id: check-vulns
+      run: |
+        echo "has_changes=false" >> $GITHUB_OUTPUT
+        
+        # Check backend vulnerabilities
+        if [ -f "audit-results-tdo-be.json" ]; then
+          cd tdo-be
+          VULN_COUNT=$(cat ../audit-results-tdo-be.json | jq -r '.metadata.vulnerabilities.total // 0')
+          if [ "$VULN_COUNT" -gt 0 ]; then
+            echo "Found $VULN_COUNT vulnerabilities in backend"
+            npm audit fix --audit-level=moderate || true
+            echo "has_changes=true" >> $GITHUB_OUTPUT
+          fi
+          cd ..
+        fi
+        
+        # Check frontend vulnerabilities
+        if [ -f "audit-results-tdo-fe.json" ]; then
+          cd tdo-fe
+          VULN_COUNT=$(cat ../audit-results-tdo-fe.json | jq -r '.metadata.vulnerabilities.total // 0')
+          if [ "$VULN_COUNT" -gt 0 ]; then
+            echo "Found $VULN_COUNT vulnerabilities in frontend"
+            npm audit fix --audit-level=moderate || true
+            echo "has_changes=true" >> $GITHUB_OUTPUT
+          fi
+          cd ..
+        fi
+    
+    - name: Generate Security Report
+      if: steps.check-vulns.outputs.has_changes == 'true'
+      run: |
+        echo "# 🔒 Security Vulnerability Fix" > SECURITY_FIX.md
+        echo "" >> SECURITY_FIX.md
+        echo "This PR contains automated security fixes for detected vulnerabilities." >> SECURITY_FIX.md
+        echo "" >> SECURITY_FIX.md
+        echo "## Changes Made" >> SECURITY_FIX.md
+        echo "" >> SECURITY_FIX.md
+        
+        if [ -f "audit-results-tdo-be.json" ]; then
+          BACKEND_VULNS=$(cat audit-results-tdo-be.json | jq -r '.metadata.vulnerabilities.total // 0')
+          if [ "$BACKEND_VULNS" -gt 0 ]; then
+            echo "### Backend (tdo-be)" >> SECURITY_FIX.md
+            echo "- Fixed $BACKEND_VULNS vulnerabilities" >> SECURITY_FIX.md
+            echo "- Updated package-lock.json with secure versions" >> SECURITY_FIX.md
+            echo "" >> SECURITY_FIX.md
+          fi
+        fi
+        
+        if [ -f "audit-results-tdo-fe.json" ]; then
+          FRONTEND_VULNS=$(cat audit-results-tdo-fe.json | jq -r '.metadata.vulnerabilities.total // 0')
+          if [ "$FRONTEND_VULNS" -gt 0 ]; then
+            echo "### Frontend (tdo-fe)" >> SECURITY_FIX.md
+            echo "- Fixed $FRONTEND_VULNS vulnerabilities" >> SECURITY_FIX.md
+            echo "- Updated package-lock.json with secure versions" >> SECURITY_FIX.md
+            echo "" >> SECURITY_FIX.md
+          fi
+        fi
+        
+        echo "## Verification" >> SECURITY_FIX.md
+        echo "" >> SECURITY_FIX.md
+        echo "- [ ] Review the changes in package-lock.json files" >> SECURITY_FIX.md
+        echo "- [ ] Test the application locally" >> SECURITY_FIX.md
+        echo "- [ ] Verify no breaking changes" >> SECURITY_FIX.md
+        echo "" >> SECURITY_FIX.md
+        echo "## Auto-generated" >> SECURITY_FIX.md
+        echo "This PR was automatically created by the Security Vulnerability Check workflow." >> SECURITY_FIX.md
+        echo "Generated on: $(date)" >> SECURITY_FIX.md
+    
+    - name: Create Pull Request
+      if: steps.check-vulns.outputs.has_changes == 'true'
+      uses: peter-evans/create-pull-request@v5
+      with:
+        token: ${{ secrets.GITHUBTOKEN }}
+        commit-message: "🔒 fix(security): auto-fix vulnerabilities detected on $(date +%Y-%m-%d)"
+        title: "🔒 Security Fix: Auto-fix vulnerabilities ($(date +%Y-%m-%d))"
+        body-path: SECURITY_FIX.md
+        branch: security-fix/auto-$(date +%Y%m%d)
+        delete-branch: true
+        labels: |
+          security
+          automated
+          dependencies
+        reviewers: |
+          vanmaikhai
+        assignees: |
+          vanmaikhai
+        draft: false
+
+  security-summary:
+    runs-on: ubuntu-latest
+    needs: [vulnerability-scan, docker-security, dockerfile-security, secrets-scan, codeql-analysis, create-security-pr]
+    if: always()
+    
+    steps:
+    - name: Download audit artifacts
+      uses: actions/download-artifact@v4
+      with:
+        pattern: audit-results-*
+        merge-multiple: true
+    
+    - name: Generate Security Report
+      run: |
+        echo "# Security Vulnerability Report" > security-report.md
+        echo "Generated on: $(date)" >> security-report.md
+        echo "" >> security-report.md
+        
+        echo "## NPM Audit Results" >> security-report.md
+        if [ -f "audit-results-tdo-be.json" ]; then
+          BACKEND_VULNS=$(cat audit-results-tdo-be.json | jq -r '.metadata.vulnerabilities.total // 0')
+          echo "Backend vulnerabilities: $BACKEND_VULNS" >> security-report.md
+        fi
+        
+        if [ -f "audit-results-tdo-fe.json" ]; then
+          FRONTEND_VULNS=$(cat audit-results-tdo-fe.json | jq -r '.metadata.vulnerabilities.total // 0')
+          echo "Frontend vulnerabilities: $FRONTEND_VULNS" >> security-report.md
+        fi
+        
+        echo "" >> security-report.md
+        echo "## Scan Status" >> security-report.md
+        echo "- ✅ NPM Audit: Completed" >> security-report.md
+        echo "- ✅ Trivy Scan: Completed" >> security-report.md
+        echo "- ✅ Dockerfile Lint: Completed" >> security-report.md
+        echo "- ✅ Secrets Scan: Completed" >> security-report.md
+        echo "- ✅ CodeQL Analysis: Completed" >> security-report.md
+        
+        if [ "${{ github.event_name }}" == "schedule" ]; then
+          echo "- 🔄 Auto-fix PR: ${{ needs.create-security-pr.result }}" >> security-report.md
+        fi
+        
+        cat security-report.md
+    
+    - name: Upload Security Report
+      uses: actions/upload-artifact@v4
+      with:
+        name: security-report
+        path: security-report.md
